@@ -1,0 +1,192 @@
+import Appointment from '../models/Appointment.js';
+import Worker from '../models/Worker.js';
+import Doctor from '../models/Doctor.js';
+import Patient from '../models/Patient.js';
+import User from '../models/User.js'; // Import User model
+import dataService from '../services/dataService.js';
+
+// @route   GET /api/appointments
+// @desc    Get all appointments for the logged-in user
+// @access  Private
+export const getAppointments = async (req, res) => {
+  try {
+    const user = req.user;
+    let appointments = [];
+
+    if (user.role === 'worker' || user.role === 'patient') {
+        const profile = await (user.role === 'worker' ? Worker.findOne({ user: user.id }) : Patient.findOne({ user: user.id }));
+        if (profile) {
+            appointments = await dataService.getAllAppointmentsForUser(profile._id, user.role);
+        }
+    } else if (user.role === 'doctor') {
+        const doctorProfile = await Doctor.findOne({ user: user.id });
+        if (doctorProfile) {
+            // This logic is specific to doctors and should remain here
+            const currentDate = new Date();
+            currentDate.setHours(0, 0, 0, 0);
+            appointments = await Appointment.find({ doctor: doctorProfile._id, date: { $gte: currentDate } }).populate('worker', 'firstName lastName').sort('date time');
+        }
+    }
+
+    res.json({ data: appointments });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server Error');
+  }
+};
+
+// @route   GET /api/appointments/user/:userId
+// @desc    Get all appointments for a specific user
+// @access  Private
+export const getAppointmentsForUser = async (req, res) => {
+    try {
+      const userId = req.params.userId;
+      const user = await User.findById(userId);
+      if (!user) {
+        return res.status(404).json({ msg: 'User not found' });
+      }
+
+      const profile = await (user.role === 'worker' ? Worker.findOne({ user: userId }) : Patient.findOne({ user: userId }));
+      if (!profile) {
+        return res.status(404).json({ msg: 'Profile not found for this user' });
+      }
+
+      const appointments = await dataService.getAppointmentsForUser(profile._id, user.role);
+      res.json({ data: appointments });
+    } catch (err) {
+      console.error(err.message);
+      res.status(500).send('Server Error');
+    }
+  };
+
+// @route   POST /api/appointments
+// @desc    Create a new appointment
+// @access  Private (Worker only)
+export const createAppointment = async (req, res) => {
+  const { doctorId, date, time, type, hospital, department, notes, contact, address, priority } = req.body;
+
+  try {
+    const user = req.user;
+
+    if (user.role !== 'worker' && user.role !== 'patient') {
+      return res.status(403).json({ msg: 'Only workers and patients can create appointments' });
+    }
+
+    let profileId;
+    if (user.role === 'worker') {
+      const workerProfile = await Worker.findOne({ user: user.id });
+      if (!workerProfile) {
+        return res.status(404).json({ msg: 'Worker profile not found' });
+      }
+      profileId = workerProfile._id;
+    } else if (user.role === 'patient') {
+      const patientProfile = await Patient.findOne({ user: user.id });
+      if (!patientProfile) {
+        return res.status(404).json({ msg: 'Patient profile not found' });
+      }
+      profileId = patientProfile._id;
+    }
+
+    const doctorProfile = await Doctor.findById(doctorId);
+    if (!doctorProfile) {
+      return res.status(404).json({ msg: 'Doctor not found' });
+    }
+
+    const newAppointment = new Appointment({
+      worker: user.role === 'worker' ? profileId : null, // Link to worker if role is worker
+      patient: user.role === 'patient' ? profileId : null, // Link to patient if role is patient
+      doctor: doctorId,
+      date,
+      time,
+      type,
+      hospital,
+      department,
+      notes,
+      contact,
+      address,
+      priority,
+    });
+
+    const appointment = await newAppointment.save();
+    res.json(appointment);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server Error');
+  }
+};
+
+// @route   PUT /api/appointments/:id
+// @desc    Update an appointment
+// @access  Private (Worker or Doctor who owns the appointment)
+export const updateAppointment = async (req, res) => {
+  const { date, time, type, hospital, department, status, priority, notes, contact, address } = req.body;
+
+  try {
+    let appointment = await Appointment.findById(req.params.id);
+
+    if (!appointment) {
+      return res.status(404).json({ msg: 'Appointment not found' });
+    }
+
+    const user = req.user;
+    const workerProfile = await Worker.findOne({ user: user.id });
+    const doctorProfile = await Doctor.findOne({ user: user.id });
+
+    // Check if user is the worker who created the appointment or the doctor assigned to it
+    const isAuthorizedWorker = workerProfile && appointment.worker.toString() === workerProfile._id.toString();
+    const isAuthorizedDoctor = doctorProfile && appointment.doctor.toString() === doctorProfile._id.toString();
+
+    if (!isAuthorizedWorker && !isAuthorizedDoctor) {
+      return res.status(401).json({ msg: 'User not authorized' });
+    }
+
+    // Update fields
+    if (date) appointment.date = date;
+    if (time) appointment.time = time;
+    if (type) appointment.type = type;
+    if (hospital) appointment.hospital = hospital;
+    if (department) appointment.department = department;
+    if (status) appointment.status = status;
+    if (priority) appointment.priority = priority;
+    if (notes) appointment.notes = notes;
+    if (contact) appointment.contact = contact;
+    if (address) appointment.address = address;
+
+    await appointment.save();
+    res.json(appointment);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server Error');
+  }
+};
+
+// @route   DELETE /api/appointments/:id
+// @desc    Delete an appointment
+// @access  Private (Worker or Doctor who owns the appointment)
+export const deleteAppointment = async (req, res) => {
+  try {
+    let appointment = await Appointment.findById(req.params.id);
+
+    if (!appointment) {
+      return res.status(404).json({ msg: 'Appointment not found' });
+    }
+
+    const user = req.user;
+    const workerProfile = await Worker.findOne({ user: user.id });
+    const doctorProfile = await Doctor.findOne({ user: user.id });
+
+    // Check if user is the worker who created the appointment or the doctor assigned to it
+    const isAuthorizedWorker = workerProfile && appointment.worker.toString() === workerProfile._id.toString();
+    const isAuthorizedDoctor = doctorProfile && appointment.doctor.toString() === doctorProfile._id.toString();
+
+    if (!isAuthorizedWorker && !isAuthorizedDoctor) {
+      return res.status(401).json({ msg: 'User not authorized' });
+    }
+
+    await appointment.deleteOne();
+    res.json({ msg: 'Appointment removed' });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server Error');
+  }
+};
