@@ -6,6 +6,9 @@ import toast, { Toaster } from 'react-hot-toast';
 const Register = () => {
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState({
+    // Role Selection
+    role: 'worker', // Default role
+
     // Step 1: Basic Information
     firstName: '',
     lastName: '',
@@ -36,7 +39,19 @@ const Register = () => {
     workLocation: '',
     workAddress: '',
     duration: '',
-    familyMembers: ''
+    familyMembers: '',
+
+    // Doctor specific fields
+    specialization: '',
+    registrationNumber: '',
+
+    // Employer specific fields
+    companyName: '',
+    companyAddress: '',
+
+    // Password
+    password: '',
+    confirmPassword: ''
   });
   const [loading, setLoading] = useState(false);
   const [photoPreview, setPhotoPreview] = useState(null);
@@ -60,10 +75,11 @@ const Register = () => {
   }, [formData.photo]);
 
   const steps = [
-    { id: 1, title: 'Basic Information' },
-    { id: 2, title: 'Health Details' },
-    { id: 3, title: 'Employment Details' },
-    { id: 4, title: 'Review & Submit' }
+    { id: 1, title: 'Role Selection' },
+    { id: 2, title: 'Basic Information' },
+    { id: 3, title: 'Health Details' },
+    { id: 4, title: 'Employment Details' },
+    { id: 5, title: 'Review & Submit' }
   ];
 
   const handleChange = (e) => {
@@ -97,13 +113,46 @@ const Register = () => {
     }
   };
 
+  const validateRoleSelection = () => {
+    if (!formData.role) {
+      toast.error('Please select a role.');
+      return false;
+    }
+    return true;
+  };
+
   const validateStep1 = () => {
-    const { firstName, lastName, gender, dob, aadhaar, mobile, nativeState, address, district, pincode, photo } = formData;
-    if (!firstName || !lastName || !gender || !dob || !aadhaar || !mobile || !nativeState || !address || !district || !pincode || !photo) {
+    const { firstName, lastName, gender, dob, aadhaar, mobile, nativeState, address, district, pincode, photo, role } = formData;
+    
+    // Common validations for all roles
+    if (!firstName || !lastName || !gender || !dob || !mobile || !nativeState || !address || !district || !pincode || !photo) {
       toast.error('Please fill all required fields in Basic Information.');
       return false;
     }
-    if (!/^[0-9]{12}$/.test(aadhaar)) {
+    
+    // Role-specific validations
+    if (role === 'worker' || role === 'patient') {
+      if (!aadhaar) {
+        toast.error('Aadhaar number is required for workers and patients.');
+        return false;
+      }
+    }
+    
+    if (role === 'doctor') {
+      if (!email) {
+        toast.error('Email is required for doctors.');
+        return false;
+      }
+    }
+    
+    if (role === 'employer') {
+      if (!email) {
+        toast.error('Email is required for employers.');
+        return false;
+      }
+    }
+
+    if (aadhaar && !/^[0-9]{12}$/.test(aadhaar)) {
       toast.error('Please enter a valid 12-digit Aadhaar number.');
       return false;
     }
@@ -119,18 +168,60 @@ const Register = () => {
   };
 
   const validateStep2 = () => {
-    const { bloodGroup, height, weight } = formData;
-    if (!bloodGroup || !height || !weight) {
-      toast.error('Please fill all required fields in Health Details.');
-      return false;
+    const { bloodGroup, height, weight, role } = formData;
+    
+    // Health details are required for workers and patients
+    if (role === 'worker' || role === 'patient') {
+      if (!bloodGroup || !height || !weight) {
+        toast.error('Please fill all required fields in Health Details.');
+        return false;
+      }
     }
     return true;
   };
 
   const validateStep3 = () => {
-    const { employmentType, employerName, workLocation } = formData;
-    if (!employmentType || !employerName || !workLocation) {
-      toast.error('Please fill all required fields in Employment Details.');
+    const { employmentType, employerName, workLocation, workAddress, role } = formData;
+    
+    // Employment details are required only for workers
+    if (role === 'worker') {
+      if (!employmentType || !employerName || !workLocation || !workAddress) {
+        toast.error('Please fill all required fields in Employment Details.');
+        return false;
+      }
+    }
+    
+    // Doctor specific validations
+    if (role === 'doctor') {
+      if (!formData.specialization || !formData.registrationNumber) {
+        toast.error('Please fill all required fields for doctors.');
+        return false;
+      }
+    }
+    
+    // Employer specific validations
+    if (role === 'employer') {
+      if (!formData.companyName || !formData.companyAddress) {
+        toast.error('Please fill all required fields for employers.');
+        return false;
+      }
+    }
+    
+    return true;
+  };
+
+  const validateStep4 = () => {
+    const { password, confirmPassword } = formData;
+    if (!password || !confirmPassword) {
+      toast.error('Please enter password and confirm password.');
+      return false;
+    }
+    if (password !== confirmPassword) {
+      toast.error('Passwords do not match.');
+      return false;
+    }
+    if (password.length < 6) {
+      toast.error('Password must be at least 6 characters long.');
       return false;
     }
     return true;
@@ -138,11 +229,13 @@ const Register = () => {
 
   const nextStep = () => {
     let isValid = true;
-    if (currentStep === 1) isValid = validateStep1();
-    if (currentStep === 2) isValid = validateStep2();
-    if (currentStep === 3) isValid = validateStep3();
+    if (currentStep === 1) isValid = validateRoleSelection();
+    if (currentStep === 2) isValid = validateStep1();
+    if (currentStep === 3) isValid = validateStep2();
+    if (currentStep === 4) isValid = validateStep3();
+    if (currentStep === 5) isValid = validateStep4();
 
-    if (isValid && currentStep < 4) {
+    if (isValid && currentStep < 5) {
       setCurrentStep(currentStep + 1);
     }
   };
@@ -156,14 +249,43 @@ const Register = () => {
     setLoading(true);
 
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Prepare form data for submission
+      const submitData = new FormData();
+      
+      // Add all form fields
+      Object.keys(formData).forEach(key => {
+        if (key === 'photo' && formData[key]) {
+          submitData.append(key, formData[key]);
+        } else if (Array.isArray(formData[key])) {
+          formData[key].forEach(item => submitData.append(key, item));
+        } else {
+          submitData.append(key, formData[key]);
+        }
+      });
 
-      // Mock registration success
-      toast.success('Registration successful! Your Health ID will be sent to your registered mobile number.');
-      navigate('/login');
+      // For non-worker roles, we need to send JSON data
+      const jsonData = { ...formData };
+      delete jsonData.photo; // Remove photo from JSON data
+
+      const response = await fetch('http://localhost:5000/api/auth/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(jsonData)
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        toast.success('Registration successful! Please login with your credentials.');
+        navigate('/login');
+      } else {
+        toast.error(data.msg || 'Registration failed. Please try again.');
+      }
     } catch (error) {
       console.error('Registration failed:', error);
+      toast.error('Registration failed. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -225,6 +347,95 @@ const Register = () => {
     </div>
   );
 
+  const renderRoleSelection = () => (
+    <div className="space-y-6">
+      <div className="text-center mb-8">
+        <h2 className="text-2xl font-bold text-gray-800 mb-2">Select Your Role</h2>
+        <p className="text-gray-600">Please select the role that best describes you</p>
+      </div>
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div 
+          className={`border-2 rounded-xl p-6 cursor-pointer transition-all duration-300 ${
+            formData.role === 'worker' 
+              ? 'border-indigo-500 bg-indigo-50 shadow-md' 
+              : 'border-gray-200 hover:border-indigo-300 hover:bg-gray-50'
+          }`}
+          onClick={() => setFormData(prev => ({ ...prev, role: 'worker' }))}
+        >
+          <div className="text-center">
+            <div className="mx-auto bg-indigo-100 rounded-full w-16 h-16 flex items-center justify-center mb-4">
+              <UserCircle className="w-8 h-8 text-indigo-600" />
+            </div>
+            <h3 className="font-semibold text-lg mb-2">Worker</h3>
+            <p className="text-sm text-gray-600">Migrant worker seeking health services</p>
+          </div>
+        </div>
+        
+        <div 
+          className={`border-2 rounded-xl p-6 cursor-pointer transition-all duration-300 ${
+            formData.role === 'doctor' 
+              ? 'border-green-500 bg-green-50 shadow-md' 
+              : 'border-gray-200 hover:border-green-300 hover:bg-gray-50'
+          }`}
+          onClick={() => setFormData(prev => ({ ...prev, role: 'doctor' }))}
+        >
+          <div className="text-center">
+            <div className="mx-auto bg-green-100 rounded-full w-16 h-16 flex items-center justify-center mb-4">
+              <UserCircle className="w-8 h-8 text-green-600" />
+            </div>
+            <h3 className="font-semibold text-lg mb-2">Doctor</h3>
+            <p className="text-sm text-gray-600">Medical professional providing care</p>
+          </div>
+        </div>
+        
+        <div 
+          className={`border-2 rounded-xl p-6 cursor-pointer transition-all duration-300 ${
+            formData.role === 'patient' 
+              ? 'border-blue-500 bg-blue-50 shadow-md' 
+              : 'border-gray-200 hover:border-blue-300 hover:bg-gray-50'
+          }`}
+          onClick={() => setFormData(prev => ({ ...prev, role: 'patient' }))}
+        >
+          <div className="text-center">
+            <div className="mx-auto bg-blue-100 rounded-full w-16 h-16 flex items-center justify-center mb-4">
+              <UserCircle className="w-8 h-8 text-blue-600" />
+            </div>
+            <h3 className="font-semibold text-lg mb-2">Patient</h3>
+            <p className="text-sm text-gray-600">General patient seeking health services</p>
+          </div>
+        </div>
+        
+        <div 
+          className={`border-2 rounded-xl p-6 cursor-pointer transition-all duration-300 ${
+            formData.role === 'employer' 
+              ? 'border-amber-500 bg-amber-50 shadow-md' 
+              : 'border-gray-200 hover:border-amber-300 hover:bg-gray-50'
+          }`}
+          onClick={() => setFormData(prev => ({ ...prev, role: 'employer' }))}
+        >
+          <div className="text-center">
+            <div className="mx-auto bg-amber-100 rounded-full w-16 h-16 flex items-center justify-center mb-4">
+              <UserCircle className="w-8 h-8 text-amber-600" />
+            </div>
+            <h3 className="font-semibold text-lg mb-2">Employer</h3>
+            <p className="text-sm text-gray-600">Employer managing worker health records</p>
+          </div>
+        </div>
+      </div>
+      
+      <div className="mt-8 p-4 bg-blue-50 rounded-lg border border-blue-200">
+        <h3 className="font-semibold text-blue-800 mb-2">Selected Role: {formData.role.charAt(0).toUpperCase() + formData.role.slice(1)}</h3>
+        <p className="text-sm text-blue-700">
+          {formData.role === 'worker' && 'As a worker, you will be able to register your health details and access health services.'}
+          {formData.role === 'doctor' && 'As a doctor, you will be able to manage patient records and provide medical care.'}
+          {formData.role === 'patient' && 'As a patient, you will be able to register your health details and access health services.'}
+          {formData.role === 'employer' && 'As an employer, you will be able to manage your workers health records and ensure compliance.'}
+        </p>
+      </div>
+    </div>
+  );
+
   const renderStep1 = () => (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-8">
@@ -282,20 +493,25 @@ const Register = () => {
           />
           <label htmlFor="dob" className="form-label">Date of Birth *</label>
         </div>
-        <div className="input-group">
-          <input
-            id="aadhaar"
-            name="aadhaar"
-            type="text"
-            pattern="[0-9]{12}"
-            required
-            value={formData.aadhaar}
-            onChange={handleChange}
-            className="form-input"
-            placeholder=" "
-          />
-          <label htmlFor="aadhaar" className="form-label">Aadhaar Number *</label>
-        </div>
+        
+        {/* Conditional fields based on role */}
+        {(formData.role === 'worker' || formData.role === 'patient') && (
+          <div className="input-group">
+            <input
+              id="aadhaar"
+              name="aadhaar"
+              type="text"
+              pattern="[0-9]{12}"
+              required={formData.role === 'worker' || formData.role === 'patient'}
+              value={formData.aadhaar}
+              onChange={handleChange}
+              className="form-input"
+              placeholder=" "
+            />
+            <label htmlFor="aadhaar" className="form-label">Aadhaar Number *</label>
+          </div>
+        )}
+        
         <div className="input-group">
           <input
             id="mobile"
@@ -310,18 +526,38 @@ const Register = () => {
           />
           <label htmlFor="mobile" className="form-label">Mobile Number *</label>
         </div>
-        <div className="input-group">
-          <input
-            id="email"
-            name="email"
-            type="email"
-            value={formData.email}
-            onChange={handleChange}
-            className="form-input"
-            placeholder=" "
-          />
-          <label htmlFor="email" className="form-label">Email Address</label>
-        </div>
+        
+        {(formData.role === 'doctor' || formData.role === 'employer') && (
+          <div className="input-group">
+            <input
+              id="email"
+              name="email"
+              type="email"
+              required={formData.role === 'doctor' || formData.role === 'employer'}
+              value={formData.email}
+              onChange={handleChange}
+              className="form-input"
+              placeholder=" "
+            />
+            <label htmlFor="email" className="form-label">Email Address *</label>
+          </div>
+        )}
+        
+        {formData.role !== 'doctor' && formData.role !== 'employer' && (
+          <div className="input-group">
+            <input
+              id="email"
+              name="email"
+              type="email"
+              value={formData.email}
+              onChange={handleChange}
+              className="form-input"
+              placeholder=" "
+            />
+            <label htmlFor="email" className="form-label">Email Address</label>
+          </div>
+        )}
+        
         <div className="input-group">
           <select
             id="nativeState"
@@ -337,6 +573,7 @@ const Register = () => {
             <option value="odisha">Odisha</option>
             <option value="assam">Assam</option>
             <option value="up">Uttar Pradesh</option>
+            <option value="kerala">Kerala</option>
             <option value="other">Other</option>
           </select>
           <label htmlFor="nativeState" className="form-label">Native State *</label>
@@ -393,291 +630,415 @@ const Register = () => {
 
   const renderStep2 = () => (
     <div className="space-y-6">
+      {/* Password fields for all roles */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-8">
         <div className="input-group">
-          <select
-            id="bloodGroup"
-            name="bloodGroup"
-            required
-            value={formData.bloodGroup}
-            onChange={handleChange}
-              className="form-input"
-          >
-            <option value="">Select Blood Group</option>
-            <option value="A+">A+</option>
-            <option value="A-">A-</option>
-            <option value="B+">B+</option>
-            <option value="B-">B-</option>
-            <option value="AB+">AB+</option>
-            <option value="AB-">AB-</option>
-            <option value="O+">O+</option>
-            <option value="O-">O-</option>
-          </select>
-          <label htmlFor="bloodGroup" className="form-label">Blood Group *</label>
-        </div>
-        <div className="input-group">
           <input
-            id="height"
-            name="height"
-            type="number"
+            id="password"
+            name="password"
+            type="password"
             required
-            value={formData.height}
-            onChange={handleChange}
-              className="form-input"
-            placeholder=" "
-          />
-          <label htmlFor="height" className="form-label">Height (cm) *</label>
-        </div>
-        <div className="input-group">
-          <input
-            id="weight"
-            name="weight"
-            type="number"
-            required
-            value={formData.weight}
-            onChange={handleChange}
-              className="form-input"
-            placeholder=" "
-          />
-          <label htmlFor="weight" className="form-label">Weight (kg) *</label>
-        </div>
-        <div className="input-group">
-          <label htmlFor="disabilities" className="form-label">Any Disabilities?</label>
-          <select
-            id="disabilities"
-            name="disabilities"
-            value={formData.disabilities}
-            onChange={handleChange}
-            className="form-input"
-          >
-            <option value="no">No</option>
-            <option value="yes">Yes</option>
-          </select>
-        </div>
-        <div className="input-group">
-          <label htmlFor="chronicConditions" className="form-label">Chronic Conditions</label>
-          <div className="flex flex-wrap gap-2">
-            <label className="inline-flex items-center">
-              <input
-                type="checkbox"
-                name="chronicConditions"
-                value="diabetes"
-                checked={formData.chronicConditions.includes('diabetes')}
-                onChange={handleChange}
-                className="form-checkbox"
-              />
-              <span className="ml-2">Diabetes</span>
-            </label>
-            <label className="inline-flex items-center">
-              <input
-                type="checkbox"
-                name="chronicConditions"
-                value="hypertension"
-                checked={formData.chronicConditions.includes('hypertension')}
-                onChange={handleChange}
-                className="form-checkbox"
-              />
-              <span className="ml-2">Hypertension</span>
-            </label>
-            <label className="inline-flex items-center">
-              <input
-                type="checkbox"
-                name="chronicConditions"
-                value="heartDisease"
-                checked={formData.chronicConditions.includes('heartDisease')}
-                onChange={handleChange}
-                className="form-checkbox"
-              />
-              <span className="ml-2">Heart Disease</span>
-            </label>
-            <label className="inline-flex items-center">
-              <input
-                type="checkbox"
-                name="chronicConditions"
-                value="cancer"
-                checked={formData.chronicConditions.includes('cancer')}
-                onChange={handleChange}
-                className="form-checkbox"
-              />
-              <span className="ml-2">Cancer</span>
-            </label>
-            <label className="inline-flex items-center">
-              <input
-                type="checkbox"
-                name="chronicConditions"
-                value="other"
-                checked={formData.chronicConditions.includes('other')}
-                onChange={handleChange}
-                className="form-checkbox"
-              />
-              <span className="ml-2">Other</span>
-            </label>
-          </div>
-        </div>
-        <div className="input-group">
-          <label htmlFor="vaccinations" className="form-label">Vaccinations</label>
-          <div className="flex flex-wrap gap-2">
-            <label className="inline-flex items-center">
-              <input
-                type="checkbox"
-                name="vaccinations"
-                value="covid19"
-                checked={formData.vaccinations.includes('covid19')}
-                onChange={handleChange}
-                className="form-checkbox"
-              />
-              <span className="ml-2">Covid-19</span>
-            </label>
-            <label className="inline-flex items-center">
-              <input
-                type="checkbox"
-                name="vaccinations"
-                value="hepatitis"
-                checked={formData.vaccinations.includes('hepatitis')}
-                onChange={handleChange}
-                className="form-checkbox"
-              />
-              <span className="ml-2">Hepatitis</span>
-            </label>
-            <label className="inline-flex items-center">
-              <input
-                type="checkbox"
-                name="vaccinations"
-                value="polio"
-                checked={formData.vaccinations.includes('polio')}
-                onChange={handleChange}
-                className="form-checkbox"
-              />
-              <span className="ml-2">Polio</span>
-            </label>
-            <label className="inline-flex items-center">
-              <input
-                type="checkbox"
-                name="vaccinations"
-                value="tetanus"
-                checked={formData.vaccinations.includes('tetanus')}
-                onChange={handleChange}
-                className="form-checkbox"
-              />
-              <span className="ml-2">Tetanus</span>
-            </label>
-            <label className="inline-flex items-center">
-              <input
-                type="checkbox"
-                name="vaccinations"
-                value="other"
-                checked={formData.vaccinations.includes('other')}
-                onChange={handleChange}
-                className="form-checkbox"
-              />
-              <span className="ml-2">Other</span>
-            </label>
-          </div>
-        </div>
-        <div className="input-group">
-          <input
-            id="previousDisease"
-            name="previousDisease"
-            type="text"
-            value={formData.previousDisease}
+            value={formData.password}
             onChange={handleChange}
             className="form-input"
             placeholder=" "
           />
-          <label htmlFor="previousDisease" className="form-label">Previous Diseases</label>
+          <label htmlFor="password" className="form-label">Password *</label>
+        </div>
+        <div className="input-group">
+          <input
+            id="confirmPassword"
+            name="confirmPassword"
+            type="password"
+            required
+            value={formData.confirmPassword}
+            onChange={handleChange}
+            className="form-input"
+            placeholder=" "
+          />
+          <label htmlFor="confirmPassword" className="form-label">Confirm Password *</label>
         </div>
       </div>
+      
+      {/* Health details - only for worker and patient roles */}
+      {(formData.role === 'worker' || formData.role === 'patient') && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-8 mt-8">
+          <div className="input-group">
+            <select
+              id="bloodGroup"
+              name="bloodGroup"
+              required
+              value={formData.bloodGroup}
+              onChange={handleChange}
+              className="form-input"
+            >
+              <option value="">Select Blood Group</option>
+              <option value="A+">A+</option>
+              <option value="A-">A-</option>
+              <option value="B+">B+</option>
+              <option value="B-">B-</option>
+              <option value="AB+">AB+</option>
+              <option value="AB-">AB-</option>
+              <option value="O+">O+</option>
+              <option value="O-">O-</option>
+            </select>
+            <label htmlFor="bloodGroup" className="form-label">Blood Group *</label>
+          </div>
+          <div className="input-group">
+            <input
+              id="height"
+              name="height"
+              type="number"
+              required
+              value={formData.height}
+              onChange={handleChange}
+              className="form-input"
+              placeholder=" "
+            />
+            <label htmlFor="height" className="form-label">Height (cm) *</label>
+          </div>
+          <div className="input-group">
+            <input
+              id="weight"
+              name="weight"
+              type="number"
+              required
+              value={formData.weight}
+              onChange={handleChange}
+              className="form-input"
+              placeholder=" "
+            />
+            <label htmlFor="weight" className="form-label">Weight (kg) *</label>
+          </div>
+          <div className="input-group">
+            <label htmlFor="disabilities" className="form-label">Any Disabilities?</label>
+            <select
+              id="disabilities"
+              name="disabilities"
+              value={formData.disabilities}
+              onChange={handleChange}
+              className="form-input"
+            >
+              <option value="no">No</option>
+              <option value="yes">Yes</option>
+            </select>
+          </div>
+          <div className="input-group">
+            <label htmlFor="chronicConditions" className="form-label">Chronic Conditions</label>
+            <div className="flex flex-wrap gap-2">
+              <label className="inline-flex items-center">
+                <input
+                  type="checkbox"
+                  name="chronicConditions"
+                  value="diabetes"
+                  checked={formData.chronicConditions.includes('diabetes')}
+                  onChange={handleChange}
+                  className="form-checkbox"
+                />
+                <span className="ml-2">Diabetes</span>
+              </label>
+              <label className="inline-flex items-center">
+                <input
+                  type="checkbox"
+                  name="chronicConditions"
+                  value="hypertension"
+                  checked={formData.chronicConditions.includes('hypertension')}
+                  onChange={handleChange}
+                  className="form-checkbox"
+                />
+                <span className="ml-2">Hypertension</span>
+              </label>
+              <label className="inline-flex items-center">
+                <input
+                  type="checkbox"
+                  name="chronicConditions"
+                  value="heartDisease"
+                  checked={formData.chronicConditions.includes('heartDisease')}
+                  onChange={handleChange}
+                  className="form-checkbox"
+                />
+                <span className="ml-2">Heart Disease</span>
+              </label>
+              <label className="inline-flex items-center">
+                <input
+                  type="checkbox"
+                  name="chronicConditions"
+                  value="cancer"
+                  checked={formData.chronicConditions.includes('cancer')}
+                  onChange={handleChange}
+                  className="form-checkbox"
+                />
+                <span className="ml-2">Cancer</span>
+              </label>
+              <label className="inline-flex items-center">
+                <input
+                  type="checkbox"
+                  name="chronicConditions"
+                  value="other"
+                  checked={formData.chronicConditions.includes('other')}
+                  onChange={handleChange}
+                  className="form-checkbox"
+                />
+                <span className="ml-2">Other</span>
+              </label>
+            </div>
+          </div>
+          <div className="input-group">
+            <label htmlFor="vaccinations" className="form-label">Vaccinations</label>
+            <div className="flex flex-wrap gap-2">
+              <label className="inline-flex items-center">
+                <input
+                  type="checkbox"
+                  name="vaccinations"
+                  value="covid19"
+                  checked={formData.vaccinations.includes('covid19')}
+                  onChange={handleChange}
+                  className="form-checkbox"
+                />
+                <span className="ml-2">Covid-19</span>
+              </label>
+              <label className="inline-flex items-center">
+                <input
+                  type="checkbox"
+                  name="vaccinations"
+                  value="hepatitis"
+                  checked={formData.vaccinations.includes('hepatitis')}
+                  onChange={handleChange}
+                  className="form-checkbox"
+                />
+                <span className="ml-2">Hepatitis</span>
+              </label>
+              <label className="inline-flex items-center">
+                <input
+                  type="checkbox"
+                  name="vaccinations"
+                  value="polio"
+                  checked={formData.vaccinations.includes('polio')}
+                  onChange={handleChange}
+                  className="form-checkbox"
+                />
+                <span className="ml-2">Polio</span>
+              </label>
+              <label className="inline-flex items-center">
+                <input
+                  type="checkbox"
+                  name="vaccinations"
+                  value="tetanus"
+                  checked={formData.vaccinations.includes('tetanus')}
+                  onChange={handleChange}
+                  className="form-checkbox"
+                />
+                <span className="ml-2">Tetanus</span>
+              </label>
+              <label className="inline-flex items-center">
+                <input
+                  type="checkbox"
+                  name="vaccinations"
+                  value="other"
+                  checked={formData.vaccinations.includes('other')}
+                  onChange={handleChange}
+                  className="form-checkbox"
+                />
+                <span className="ml-2">Other</span>
+              </label>
+            </div>
+          </div>
+          <div className="input-group">
+            <input
+              id="previousDisease"
+              name="previousDisease"
+              type="text"
+              value={formData.previousDisease}
+              onChange={handleChange}
+              className="form-input"
+              placeholder=" "
+            />
+            <label htmlFor="previousDisease" className="form-label">Previous Diseases</label>
+          </div>
+        </div>
+      )}
     </div>
   );
 
   const renderStep3 = () => (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-8">
-        <div className="input-group">
-          <select
-            id="employmentType"
-            name="employmentType"
-            required
-            value={formData.employmentType}
-            onChange={handleChange}
+      {/* Doctor specific fields */}
+      {formData.role === 'doctor' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-8">
+          <div className="input-group">
+            <input
+              id="specialization"
+              name="specialization"
+              type="text"
+              required
+              value={formData.specialization}
+              onChange={handleChange}
               className="form-input"
-          >
-            <option value="">Select Employment Type</option>
-            <option value="construction">Construction Worker</option>
-            <option value="factory">Factory Worker</option>
-            <option value="domestic">Domestic Worker</option>
-            <option value="agricultural">Agricultural Worker</option>
-            <option value="other">Other</option>
-          </select>
-          <label htmlFor="employmentType" className="form-label">Employment Type *</label>
-        </div>
-        <div className="input-group">
-          <input
-            id="employerName"
-            name="employerName"
-            type="text"
-            required
-            value={formData.employerName}
-            onChange={handleChange}
+              placeholder=" "
+            />
+            <label htmlFor="specialization" className="form-label">Specialization *</label>
+          </div>
+          <div className="input-group">
+            <input
+              id="registrationNumber"
+              name="registrationNumber"
+              type="text"
+              required
+              value={formData.registrationNumber}
+              onChange={handleChange}
               className="form-input"
-            placeholder=" "
-          />
-          <label htmlFor="employerName" className="form-label">Employer Name *</label>
-        </div>
-        <div className="input-group">
-          <input
-            id="employerContact"
-            name="employerContact"
-            type="tel"
-            value={formData.employerContact}
-            onChange={handleChange}
+              placeholder=" "
+            />
+            <label htmlFor="registrationNumber" className="form-label">Registration Number *</label>
+          </div>
+          <div className="input-group">
+            <input
+              id="employerName"
+              name="employerName"
+              type="text"
+              value={formData.employerName}
+              onChange={handleChange}
               className="form-input"
-            placeholder=" "
-          />
-          <label htmlFor="employerContact" className="form-label">Employer Contact</label>
+              placeholder=" "
+            />
+            <label htmlFor="employerName" className="form-label">Hospital/Clinic Name</label>
+          </div>
+          <div className="input-group md:col-span-2">
+            <textarea 
+              id="workAddress" 
+              name="workAddress" 
+              rows="3" 
+              value={formData.workAddress} 
+              onChange={handleChange} 
+              className="form-input" 
+              placeholder=" "
+            ></textarea>
+            <label htmlFor="workAddress" className="form-label">Hospital/Clinic Address</label>
+          </div>
         </div>
-        <div className="input-group">
-          <input
-            id="workLocation"
-            name="workLocation"
-            type="text"
-            required
-            value={formData.workLocation}
-            onChange={handleChange}
+      )}
+      
+      {/* Employer specific fields */}
+      {formData.role === 'employer' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-8">
+          <div className="input-group">
+            <input
+              id="companyName"
+              name="companyName"
+              type="text"
+              required
+              value={formData.companyName}
+              onChange={handleChange}
               className="form-input"
-            placeholder=" "
-          />
-          <label htmlFor="workLocation" className="form-label">Work Location *</label>
+              placeholder=" "
+            />
+            <label htmlFor="companyName" className="form-label">Company Name *</label>
+          </div>
+          <div className="input-group md:col-span-2">
+            <textarea 
+              id="companyAddress" 
+              name="companyAddress" 
+              rows="3" 
+              required 
+              value={formData.companyAddress} 
+              onChange={handleChange} 
+              className="form-input" 
+              placeholder=" "
+            ></textarea>
+            <label htmlFor="companyAddress" className="form-label">Company Address *</label>
+          </div>
         </div>
-        <div className="input-group">
-          <select
-            id="duration"
-            name="duration"
-            value={formData.duration}
-            onChange={handleChange}
+      )}
+      
+      {/* Worker specific fields */}
+      {formData.role === 'worker' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-8">
+          <div className="input-group">
+            <select
+              id="employmentType"
+              name="employmentType"
+              required
+              value={formData.employmentType}
+              onChange={handleChange}
               className="form-input"
-          >
-            <option value="">Select Duration</option>
-            <option value="less-1">Less than 1 year</option>
-            <option value="1-3">1-3 years</option>
-            <option value="3-5">3-5 years</option>
-            <option value="more-5">More than 5 years</option>
-          </select>
-          <label htmlFor="duration" className="form-label">Duration of Employment</label>
-        </div>
-        <div className="input-group">
-          <input
-            id="familyMembers"
-            name="familyMembers"
-            type="number"
-            value={formData.familyMembers}
-            onChange={handleChange}
+            >
+              <option value="">Select Employment Type</option>
+              <option value="construction">Construction Worker</option>
+              <option value="factory">Factory Worker</option>
+              <option value="domestic">Domestic Worker</option>
+              <option value="agricultural">Agricultural Worker</option>
+              <option value="other">Other</option>
+            </select>
+            <label htmlFor="employmentType" className="form-label">Employment Type *</label>
+          </div>
+          <div className="input-group">
+            <input
+              id="employerName"
+              name="employerName"
+              type="text"
+              required
+              value={formData.employerName}
+              onChange={handleChange}
               className="form-input"
-            placeholder=" "
-          />
-          <label htmlFor="familyMembers" className="form-label">Number of Family Members</label>
+              placeholder=" "
+            />
+            <label htmlFor="employerName" className="form-label">Employer Name *</label>
+          </div>
+          <div className="input-group">
+            <input
+              id="employerContact"
+              name="employerContact"
+              type="tel"
+              value={formData.employerContact}
+              onChange={handleChange}
+              className="form-input"
+              placeholder=" "
+            />
+            <label htmlFor="employerContact" className="form-label">Employer Contact</label>
+          </div>
+          <div className="input-group">
+            <input
+              id="workLocation"
+              name="workLocation"
+              type="text"
+              required
+              value={formData.workLocation}
+              onChange={handleChange}
+              className="form-input"
+              placeholder=" "
+            />
+            <label htmlFor="workLocation" className="form-label">Work Location *</label>
+          </div>
+          <div className="input-group">
+            <select
+              id="duration"
+              name="duration"
+              value={formData.duration}
+              onChange={handleChange}
+              className="form-input"
+            >
+              <option value="">Select Duration</option>
+              <option value="less-1">Less than 1 year</option>
+              <option value="1-3">1-3 years</option>
+              <option value="3-5">3-5 years</option>
+              <option value="more-5">More than 5 years</option>
+            </select>
+            <label htmlFor="duration" className="form-label">Duration of Employment</label>
+          </div>
+          <div className="input-group">
+            <input
+              id="familyMembers"
+              name="familyMembers"
+              type="number"
+              value={formData.familyMembers}
+              onChange={handleChange}
+              className="form-input"
+              placeholder=" "
+            />
+            <label htmlFor="familyMembers" className="form-label">Number of Family Members</label>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 
@@ -689,14 +1050,24 @@ const Register = () => {
       </div>
 
       <div className="space-y-6 text-sm border border-gray-200 rounded-lg p-6">
+        {/* Role Information */}
+        <div>
+          <h4 className="text-base font-semibold text-gray-800 border-b pb-2 mb-4">Role Information</h4>
+          <div className="grid md:grid-cols-2 gap-x-8 gap-y-3">
+            <p><strong>Role:</strong> {formData.role.charAt(0).toUpperCase() + formData.role.slice(1)}</p>
+          </div>
+        </div>
+
         {/* Personal Information */}
         <div>
-          <h4 className="text-base font-semibold text-gray-800 border-b pb-2 mb-4">Personal Information</h4>
+          <h4 className="text-base font-semibold text-gray-800 border-b pb-2 mb-4 mt-6">Personal Information</h4>
           <div className="grid md:grid-cols-2 gap-x-8 gap-y-3">
             <p><strong>Name:</strong> {formData.firstName} {formData.lastName}</p>
             <p><strong>Gender:</strong> {formData.gender}</p>
             <p><strong>Date of Birth:</strong> {formData.dob}</p>
-            <p><strong>Aadhaar:</strong> {formData.aadhaar}</p>
+            {(formData.role === 'worker' || formData.role === 'patient') && (
+              <p><strong>Aadhaar:</strong> {formData.aadhaar}</p>
+            )}
             <p><strong>Mobile:</strong> {formData.mobile}</p>
             <p><strong>Email:</strong> {formData.email || 'N/A'}</p>
             <p className="md:col-span-2"><strong>Native State:</strong> {formData.nativeState}</p>
@@ -707,27 +1078,61 @@ const Register = () => {
         </div>
 
         {/* Health Information */}
-        <div>
-          <h4 className="text-base font-semibold text-gray-800 border-b pb-2 mb-4 mt-6">Health Information</h4>
-          <div className="grid md:grid-cols-2 gap-x-8 gap-y-3">
-            <p><strong>Blood Group:</strong> {formData.bloodGroup}</p>
-            <p><strong>Height:</strong> {formData.height} cm</p>
-            <p><strong>Weight:</strong> {formData.weight} kg</p>
-            <p><strong>Disabilities:</strong> {formData.disabilities}</p>
-            <p className="md:col-span-2"><strong>Previous Disease:</strong> {formData.previousDisease || 'N/A'}</p>
+        {(formData.role === 'worker' || formData.role === 'patient') && (
+          <div>
+            <h4 className="text-base font-semibold text-gray-800 border-b pb-2 mb-4 mt-6">Health Information</h4>
+            <div className="grid md:grid-cols-2 gap-x-8 gap-y-3">
+              <p><strong>Blood Group:</strong> {formData.bloodGroup}</p>
+              <p><strong>Height:</strong> {formData.height} cm</p>
+              <p><strong>Weight:</strong> {formData.weight} kg</p>
+              <p><strong>Disabilities:</strong> {formData.disabilities}</p>
+              <p className="md:col-span-2"><strong>Previous Disease:</strong> {formData.previousDisease || 'N/A'}</p>
+            </div>
           </div>
-        </div>
+        )}
 
-        {/* Employment Information */}
+        {/* Role-specific Information */}
         <div>
-          <h4 className="text-base font-semibold text-gray-800 border-b pb-2 mb-4 mt-6">Employment Information</h4>
+          <h4 className="text-base font-semibold text-gray-800 border-b pb-2 mb-4 mt-6">
+            {formData.role === 'worker' && 'Employment Information'}
+            {formData.role === 'doctor' && 'Professional Information'}
+            {formData.role === 'employer' && 'Company Information'}
+            {formData.role === 'patient' && 'Additional Information'}
+          </h4>
           <div className="grid md:grid-cols-2 gap-x-8 gap-y-3">
-            <p><strong>Employment Type:</strong> {formData.employmentType}</p>
-            <p><strong>Employer Name:</strong> {formData.employerName}</p>
-            <p><strong>Employer Contact:</strong> {formData.employerContact || 'N/A'}</p>
-            <p><strong>Work Location:</strong> {formData.workLocation}</p>
-            <p><strong>Duration of Employment:</strong> {formData.duration || 'N/A'}</p>
-            <p><strong>Family Members:</strong> {formData.familyMembers || 'N/A'}</p>
+            {formData.role === 'worker' && (
+              <>
+                <p><strong>Employment Type:</strong> {formData.employmentType}</p>
+                <p><strong>Employer Name:</strong> {formData.employerName}</p>
+                <p><strong>Employer Contact:</strong> {formData.employerContact || 'N/A'}</p>
+                <p><strong>Work Location:</strong> {formData.workLocation}</p>
+                <p><strong>Duration:</strong> {formData.duration || 'N/A'}</p>
+                <p><strong>Family Members:</strong> {formData.familyMembers || '0'}</p>
+              </>
+            )}
+            
+            {formData.role === 'doctor' && (
+              <>
+                <p><strong>Specialization:</strong> {formData.specialization}</p>
+                <p><strong>Registration Number:</strong> {formData.registrationNumber}</p>
+                <p><strong>Hospital/Clinic Name:</strong> {formData.employerName || 'N/A'}</p>
+                <p className="md:col-span-2"><strong>Hospital/Clinic Address:</strong> {formData.workAddress || 'N/A'}</p>
+              </>
+            )}
+            
+            {formData.role === 'employer' && (
+              <>
+                <p><strong>Company Name:</strong> {formData.companyName}</p>
+                <p className="md:col-span-2"><strong>Company Address:</strong> {formData.companyAddress}</p>
+              </>
+            )}
+            
+            {formData.role === 'patient' && (
+              <>
+                <p><strong>Chronic Conditions:</strong> {formData.chronicConditions.length > 0 ? formData.chronicConditions.join(', ') : 'None'}</p>
+                <p><strong>Vaccinations:</strong> {formData.vaccinations.length > 0 ? formData.vaccinations.join(', ') : 'None'}</p>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -913,13 +1318,14 @@ const Register = () => {
         </div>
         {renderStepIndicator()}
 
-        <form>
+        <form onSubmit={handleSubmit}>
           <div className="bg-white/80 backdrop-blur-md p-4 sm:p-8 rounded-2xl shadow-lg border border-white/20 transition-all duration-500 animate-fade-in">
             <div className="transition-all duration-500 animate-fade-in">
-              {currentStep === 1 && renderStep1()}
-              {currentStep === 2 && renderStep2()}
-              {currentStep === 3 && renderStep3()}
-              {currentStep === 4 && renderStep4()}
+              {currentStep === 1 && renderRoleSelection()}
+              {currentStep === 2 && renderStep1()}
+              {currentStep === 3 && renderStep2()}
+              {currentStep === 4 && renderStep3()}
+              {currentStep === 5 && renderStep4()}
             </div>
 
             <div className="flex flex-col sm:flex-row justify-between mt-8 gap-4 transition-all duration-500">
@@ -934,7 +1340,7 @@ const Register = () => {
                 </button>
               )}
 
-              {currentStep < 4 ? (
+              {currentStep < 5 ? (
                 <button
                   type="button"
                   onClick={nextStep}
@@ -945,12 +1351,24 @@ const Register = () => {
                 </button>
               ) : (
                 <button
-                  type="button"
-                  onClick={handleSubmit}
+                  type="submit"
                   disabled={loading}
                   className="flex items-center px-6 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 ml-auto disabled:opacity-50 transition-all duration-300 animated-btn animated-btn-pop"
                 >
-                  {loading ? 'Submitting...' : 'Submit Registration'}
+                  {loading ? (
+                    <>
+                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Registering...
+                    </>
+                  ) : (
+                    <>
+                      Submit Registration
+                      <Check className="w-4 h-4 ml-2" />
+                    </>
+                  )}
                 </button>
               )}
             </div>
